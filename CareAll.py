@@ -11,7 +11,9 @@ except Exception:
 
 class Elder:
     def registration(self):
+        """ Class method used to register elder couples. """
         eid = int(input("\nCreate login (enter unique integer ID): "))
+        #Check whether the ID is already present.
         while True:
             c.execute("SELECT * FROM ELDER_DATA WHERE E_ID=?",(eid,))
             res = c.fetchone()
@@ -19,6 +21,7 @@ class Elder:
                 eid = int(input("ID already exists, choose another: "))
             else:
                 break
+        #Input other details
         name = input("Enter your name: ")
         age = int(input("Enter age: "))
         fund = int(input("Enter fund to allocate: "))
@@ -29,20 +32,26 @@ class Elder:
         conn.execute("COMMIT")
 
     def login(self):
+        """ Class method used to log in the elder couple and manage the 
+        account using different set of options provided in the menu """
         eid = int(input("Enter ID: "))
-        c.execute("SELECT * FROM ELDER_DATA WHERE E_ID=?",(eid,))
+        #Check whether the ID is already present
+        c.execute("SELECT 1 FROM ELDER_DATA WHERE E_ID=?",(eid,))
         res = c.fetchone()
         if not res:
             print("ID does not exist")
             return
+        #Display information of the user itself
         c.execute("""SELECT * FROM ELDER_DATA WHERE E_ID = ?""",(eid,))
         print("(ID, NAME, AGE, FUND, STATUS)")
         print(next(c))
+        #Menu to manage the account by calling other class methods.
         while True:
             print("\n1.Process Requests")
             print("2.Rate assigned youngster")
             print("3.Update profile info")
-            print("4.Exit")
+            print("4.Assigned youngster's info. ")
+            print("5.Exit\n")
             action = int(input("Enter your choice: "))
             if action==1:
                 self.process_requests(eid)
@@ -51,19 +60,29 @@ class Elder:
             elif action==3:
                 self.update_info(eid)
             elif action==4:
+                self.get_assigned_youngster(eid)
+            elif action==5:
                 break
             else:
                 print("Invalid option. Please provide numeric value corresponding to your choice above.")
 
     def process_requests(self,eid):
+        """ Class method used to process and display the requests received from youngsters.
+        The user can approve a single request or can decline all the requests."""
+        #Check whether there is any request.
         c.execute("SELECT * FROM REQUEST_DATA WHERE ELDER_ID=?",(eid,))
         res = c.fetchone()
         if not res:
             print("No pending requests")
             return
+        #Display data of youngster who sent the request
         c.execute("""SELECT YOUNG_DATA.Y_ID FROM YOUNG_DATA INNER JOIN REQUEST_DATA ON YOUNG_DATA.Y_ID=REQUEST_DATA.YOUNG_ID
-                    WHERE REQUEST_DATA.ELDER_ID=?""",(eid,))
+                    WHERE REQUEST_DATA.REQUEST_STATUS = 'Pending' AND REQUEST_DATA.ELDER_ID=?""",(eid,))
         reviewee = c.fetchall()
+        if not reviewee:
+            print("No requests to display.")
+            return
+        #Called a function of Reviews class to print reviews of young chaps if any
         r = Reviews()
         r.print_reviews(reviewee,'elder')
 
@@ -89,14 +108,14 @@ class Elder:
         conn.execute("COMMIT")
         
     def add_review(self,eid):
-        c.execute("SELECT * FROM ASSIGNED_DATA WHERE ELDER_ID=?",(eid,))
+        c.execute("SELECT 1 FROM ASSIGNED_DATA WHERE ELDER_ID=?",(eid,))
         res = c.fetchone()
         if not res:
             print("You are not assigned any youngster to rate and review.")
             return
         # List youngster taking care of given elder
-        c.execute("""SELECT YOUNG_DATA.Y_ID, YOUNG_DATA.Y-NAME, YOUNG_DATA.Y_AGE FROM YOUNG_DATA
-                    INNER JOIN ASSIGNED_DATA ON ASSIGNED_DATA.YOUNG_ID = YOUNG_DATA.Y_ID WHERE ELDER_ID=?""",(eid,))
+        c.execute("""SELECT YOUNG_DATA.Y_ID, YOUNG_DATA.Y_NAME, YOUNG_DATA.Y_AGE FROM YOUNG_DATA
+                    INNER JOIN ASSIGNED_DATA ON ASSIGNED_DATA.YOUNG_ID = YOUNG_DATA.Y_ID WHERE ASSIGNED_DATA.ELDER_ID=?""",(eid,))
         tup = c.fetchone()
         print(tup)
         yid = tup[0]
@@ -113,8 +132,24 @@ class Elder:
         fund = int(input("Enter fund: "))
         c.execute("UPDATE ELDER_DATA SET E_AGE=?, E_FUND=? WHERE E_ID=?",(age,fund,eid,))
         conn.execute("COMMIT")
-
-        
+    
+    def get_assigned_youngster(self,eid):
+        c.execute("SELECT 1 FROM ASSIGNED_DATA WHERE ELDER_ID=?",(eid,))
+        res = c.fetchone()
+        if not res:
+            print("You are not assigned any youngster.")
+            return
+        c.execute("""SELECT Y_ID,Y_NAME,Y_AGE FROM YOUNG_DATA INNER JOIN ASSIGNED_DATA ON
+                  ASSIGNED_DATA.YOUNG_ID=YOUNG_DATA.Y_ID WHERE ELDER_ID=?""",(eid,))
+        print("(ID, NAME, AGE)")
+        tup = c.fetchone()
+        print(tup)
+        c.execute("SELECT REVIEW, RATING FROM REVIEW_RATING_DATA WHERE REVIEWEE_ID = ?",(tup[0],))
+        res1 = c.fetchall()
+        if res1:
+            print("(REVIEW, RATING)")
+            for row in res1:
+                print(row)
 
 
 class Youngster:
@@ -147,12 +182,12 @@ class Youngster:
         print("(ID, NAME, AGE, SALARY)")
         print(next(c))
         while True:
-            print("1.Make Request")
+            print("\n1.Make Request")
             print("2.Rate assigned elder.")
             print("3.Update profile info.")
             print("4.Assigned elders list.")
             print("5.Salary")
-            print("6.Exit")
+            print("6.Exit\n")
             x = int(input("Enter your choice: "))
             if x==1:
                 self.make_request(yid)
@@ -170,7 +205,7 @@ class Youngster:
                 print("Invalid option. Please provide numeric value corresponding to your choice above.")
 
     def make_request(self,yid):
-        c.execute("SELECT * FROM ELDER_DATA WHERE E_STATUS='Not Taken")
+        c.execute("SELECT * FROM ELDER_DATA WHERE E_STATUS='Not Taken'")
         res = c.fetchone()
         if not res:
             print("No elder to take care of.")
@@ -180,7 +215,6 @@ class Youngster:
         if q[0] == 4:
             print("Maximum limit reached")
         else:
-            
             c.execute("""SELECT E_ID FROM ELDER_DATA WHERE E_STATUS = 'Not Taken' """)
             reviewee = c.fetchall()
             r = Reviews()
@@ -227,34 +261,70 @@ class Youngster:
         conn.execute("COMMIT")
 
     def get_assigned_elders(self,yid):
-        c.execute("""SELECT * FROM ELDER_DATA INNER JOIN ASSIGNED_DATA ON
+        c.execute("SELECT 1 FROM ASSIGNED_DATA WHERE YOUNG_ID=?",(yid,))
+        res = c.fetchone()
+        if not res:
+            print("No elder has been assigned to you.")
+            return
+        c.execute("""SELECT E_ID,E_NAME,E_AGE,E_FUND FROM ELDER_DATA INNER JOIN ASSIGNED_DATA ON
                   ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE YOUNG_ID=?""",(yid,))
-        for row in c:
+        print("(ID, NAME, AGE, FUND)")
+        tup = c.fetchall()
+        for row in tup:
             print(row)
+            c.execute("SELECT REVIEW, RATING FROM REVIEW_RATING_DATA WHERE REVIEWEE_ID = ?",(row[0],))
+            res1 = c.fetchall()
+            if res1:
+                print("(REVIEW, RATING)")
+                for row1 in res1:
+                    print(row1)
 
     def salary(self,yid):
-        c.execute("""SELECT E_ID,E_NAME,E_FUND FROM ELDER_DATA INNER JOIN ASSIGNED_DATA
-                    ON ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE ASSIGNED_DATA.YOUNG_ID=?""",(yid,))
-        for row in c:
-            print(row)
         c.execute("""SELECT SUM(E_FUND) FROM ELDER_DATA INNER JOIN ASSIGNED_DATA ON
                     ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE ASSIGNED_DATA.YOUNG_ID = ? """,(yid,))
-        print("Your salary: ",next(c))
+        sal = c.fetchone()
+        print("Your salary: ",sal[0])
+        c.execute("SELECT 1 FROM ASSIGNED_DATA WHERE YOUNG_ID=?",(yid,))
+        res = c.fetchone()
+        if not res:
+            return
+        c.execute("""SELECT E_ID,E_NAME,E_FUND FROM ELDER_DATA INNER JOIN ASSIGNED_DATA
+                    ON ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE ASSIGNED_DATA.YOUNG_ID=?""",(yid,))
+        print("(ID, NAME, FUND)")
+        for row in c:
+            print(row)
+        
+
 
 class Reviews:
     def print_reviews(self, reviewees, reviewer_type):
         if reviewer_type == 'elder':
+            print("(YOUNGER ID, NAME, AGE, COMMENT, RATING)")
             for i in reviewees:
-                c.execute("""SELECT R.REVIEWEE_ID, Y.Y_NAME, Y.Y_AGE, R.REVIEW, R.RATING FROM REVIEW_RATING_DATA AS R INNER JOIN YOUNG_DATA AS Y ON 
-                            R.REVIEWEE_ID = Y.Y_ID WHERE R.REVIEWEE_ID = ?""",(i,))
-                print("(REVIEWEE ID, NAME, AGE, COMMENT, RATING)")
-                print(c.fetchall())
+                c.execute("SELECT Y_ID, Y_NAME, Y_AGE FROM YOUNG_DATA WHERE Y_ID = ?",(i[0],))
+                res1 = c.fetchall()
+                c.execute("SELECT REVIEW, RATING FROM REVIEW_RATING_DATA WHERE REVIEWEE_ID = ?",(i[0],))
+                res2 = c.fetchall()
+                if not res2:
+                    for i in res1:
+                        print(res1)
+                else:
+                    for i,j in zip(res1,res2):
+                        print(res1,res2)
+            
         else:
+            print("(ELDER ID, NAME, AGE, FUND, COMMENT, RATING)")
             for i in reviewees:
-                    c.execute("""SELECT R.REVIEWEE_ID, E.E_NAME, E.E_AGE, E.E_FUND, R.REVIEW, R.RATING FROM REVIEW_RATING_DATA AS R INNER JOIN ELDER_DATA AS E ON 
-                                R.REVIEWEE_ID = E.E_ID WHERE R.REVIEWEE_ID = ?""",(i,))
-                    print("(REVIEWEE ID, NAME, AGE, FUND, COMMENT, RATING)")
-                    print(c.fetchall())
+                c.execute("SELECT E_ID, E_NAME, E_AGE, E_FUND FROM ELDER_DATA WHERE E_ID = ?",(i[0],))
+                res1 = c.fetchall()
+                c.execute("SELECT REVIEW, RATING FROM REVIEW_RATING_DATA WHERE REVIEWEE_ID = ?",(i[0],))
+                res2 = c.fetchall()
+                if not res2:
+                    for i in res1:
+                        print(res1)
+                else:
+                    for i,j in zip(res1,res2):
+                        print(res1,res2)
         
 
     def create_update_review(self, reviewer, reviewee, rating, comment):
