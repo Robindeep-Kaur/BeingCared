@@ -1,0 +1,16 @@
+import sqlite3
+
+def connect_db():
+    conn = sqlite3.connect("CareAllDB.db")
+    c = conn.cursor()
+
+
+    c.execute("""CREATE TABLE IF NOT EXISTS ELDER_DATA(E_ID INT PRIMARY KEY, E_NAME TEXT,
+                E_AGE INT, E_FUND REAL, E_STATUS TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS YOUNG_DATA(Y_ID INT PRIMARY KEY, Y_NAME TEXT,
+                Y_AGE INT, Y_SALARY REAL)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS REQUEST_DATA(ELDER_ID INT, YOUNG_ID INT, REQUEST_STATUS TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS ASSIGNED_DATA(ELDER_ID INT PRIMARY KEY, YOUNG_ID INT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS REVIEW_RATING_DATA(REVIEWER_ID INT, REVIEWEE_ID INT, REVIEW VARCHAR, RATING INT)""")
+
+    return conn, c
