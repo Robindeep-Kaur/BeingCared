@@ -39,34 +39,34 @@ class Elder:
         print("(ID, NAME, AGE, FUND, STATUS)")
         print(next(c))
         while True:
-            e = Elder()
-            print("\n1.Display Requests")
-            print("2.Rate and Review")
-            print("3.Update Info")
+            print("\n1.Process Requests")
+            print("2.Rate assigned youngster")
+            print("3.Update profile info")
             print("4.Exit")
             action = int(input("Enter your choice: "))
             if action==1:
-                e.display_requests(eid)
+                self.process_requests(eid)
             elif action==2:
-                e.rate_and_review(eid)
+                self.add_review(eid)
             elif action==3:
-                e.update_info(eid)
+                self.update_info(eid)
             elif action==4:
                 break
             else:
                 print("Invalid option. Please provide numeric value corresponding to your choice above.")
 
-    def display_requests(self,eid):
+    def process_requests(self,eid):
         c.execute("SELECT * FROM REQUEST_DATA WHERE ELDER_ID=?",(eid,))
         res = c.fetchone()
         if not res:
             print("No pending requests")
             return
-        c.execute("""SELECT * FROM YOUNG_DATA INNER JOIN REQUEST_DATA ON YOUNG_DATA.Y_ID=REQUEST_DATA.YOUNG_ID
+        c.execute("""SELECT YOUNG_DATA.Y_ID FROM YOUNG_DATA INNER JOIN REQUEST_DATA ON YOUNG_DATA.Y_ID=REQUEST_DATA.YOUNG_ID
                     WHERE REQUEST_DATA.ELDER_ID=?""",(eid,))
-        print("(ID, NAME, AGE)")
-        for row in c:
-            print(row)
+        reviewee = c.fetchall()
+        r = Reviews()
+        r.print_reviews(reviewee,'elder')
+
         print("\n1.Approve request.")
         print("2.Decline all.")
         print("3.Exit")
@@ -88,28 +88,25 @@ class Elder:
             print("Invalid choice. Please provide numeric value corresponding to your choice above.")
         conn.execute("COMMIT")
         
-    def rate_and_review(self,eid):
-        c.execute("SELECT * FROM ASSIGNED_DATA WHERE YOUNG_ID=?",(eid,))
+    def add_review(self,eid):
+        c.execute("SELECT * FROM ASSIGNED_DATA WHERE ELDER_ID=?",(eid,))
         res = c.fetchone()
         if not res:
-            print("No one to rate and review.")
+            print("You are not assigned any youngster to rate and review.")
             return
+        # List youngster taking care of given elder
         c.execute("""SELECT YOUNG_DATA.Y_ID, YOUNG_DATA.Y-NAME, YOUNG_DATA.Y_AGE FROM YOUNG_DATA
                     INNER JOIN ASSIGNED_DATA ON ASSIGNED_DATA.YOUNG_ID = YOUNG_DATA.Y_ID WHERE ELDER_ID=?""",(eid,))
         tup = c.fetchone()
         print(tup)
         yid = tup[0]
-        c.execute("SELECT * FROM REVIEW_RATING_DATA WHERE REVIEWER_ID=? AND REVIEWEE_ID=?",(eid,yid))
-        res = c.fetchone()
-        if res:
-            rate = int(input("Enter rating out of 5: "))
-            review = str(input("Enter your review: "))
-            c.execute("UPDATE REVIEW_RATING_DATA SET REVIEW = ?, RATING = ? WHERE REVIEWER_ID = ?",(review,rate,eid))
-        else:
-            rate = int(input("Enter rating out of 5: "))
-            review = str(input("Enter your review: "))
-            c.execute("INSERT INTO REVIEW_RATING_DATA(REVIEWER_ID, REVIEWEE_ID, REVIEW, RATING) VALUES(?,?,?,?)",(eid,yid,review,rate))
-        conn.execute("COMMIT")
+        while True:
+            rating = int(input("Enter rating out of 5: "))
+            if 0<=rating<=5:
+                break
+        review = str(input("Enter your review: "))
+        r = Reviews()
+        r.create_update_review(eid,yid,rating,review)
         
     def update_info(self,eid):
         age = int(input("Enter age: "))
@@ -134,8 +131,6 @@ class Youngster:
         name = input("Enter your name: ")
         age = int(input("Enter your age: "))
         salary = 0
-        rating = 0
-        review = 'None'
         record = (yid,name,age,salary)
         c.execute("""INSERT INTO YOUNG_DATA(Y_ID,Y_NAME,Y_AGE,Y_SALARY)
                   VALUES(?,?,?,?)""",record)
@@ -153,20 +148,20 @@ class Youngster:
         print(next(c))
         while True:
             print("1.Make Request")
-            print("2.Rate and Review")
-            print("3.Update info")
-            print("4.Assigned Elders")
+            print("2.Rate assigned elder.")
+            print("3.Update profile info.")
+            print("4.Assigned elders list.")
             print("5.Salary")
             print("6.Exit")
             x = int(input("Enter your choice: "))
             if x==1:
                 self.make_request(yid)
             elif x==2:
-                self.rate_and_review(yid)
+                self.add_review(yid)
             elif x==3:
                 self.update_info(yid)
             elif x==4:
-                self.assigned_elders(yid)
+                self.get_assigned_elders(yid)
             elif x==5:
                 self.salary(yid)
             elif x==6:
@@ -186,12 +181,14 @@ class Youngster:
             print("Maximum limit reached")
         else:
             
-            c.execute("""SELECT * FROM ELDER_DATA WHERE E_STATUS = 'Not Taken' """)
-            for row in c:
-                print(row)
+            c.execute("""SELECT E_ID FROM ELDER_DATA WHERE E_STATUS = 'Not Taken' """)
+            reviewee = c.fetchall()
+            r = Reviews()
+            r.print_reviews(reviewee,'young')
+
             print("\n1.Send request.")
             print("2.exit")
-            action = int(input("Enter your choicd: "))
+            action = int(input("Enter your choice: "))
             if action == 1:
                 rid = int(input("Enter Id to make request: "))
                 r_status = 'Pending'
@@ -203,7 +200,7 @@ class Youngster:
                 print("Invalid option. Please provide numeric value corresponding to your choice above.")
 
 
-    def rate_and_review(self,yid):
+    def add_review(self,yid):
         c.execute("SELECT 1 FROM ASSIGNED_DATA WHERE YOUNG_ID=?",(yid,))
         res = c.fetchone()
         if not res:
@@ -216,26 +213,20 @@ class Youngster:
         for row in c:
             print(row)
         eid = int(input("Enter Id to rate and review: "))
-        c.execute("SELECT * FROM REVIEW_RATING_DATA WHERE REVIEWER_ID=? AND REVIEWEE_ID=?",(eid,yid))
-        res = c.fetchone()
-        if res:
-            # If a review exists already, update record
-            rate = int(input("Enter rating out of 5: "))
-            review = str(input("Enter your review: "))
-            c.execute("UPDATE REVIEW_RATING_DATA SET REVIEW = ?, RATING = ? WHERE REVIEWER_ID = ?",(review,rate,yid))
-        else:
-            # else, create a new record
-            rate = int(input("Enter rating out of 5: "))
-            review = str(input("Enter your review: "))
-            c.execute("INSERT INTO REVIEW_RATING_DATA(REVIEWER_ID, REVIEWEE_ID, REVIEW, RATING) VALUES(?,?,?,?)",(yid,eid,review,rate))
-        conn.execute("COMMIT")
+        while True:
+            rating = int(input("Enter rating out of 5: "))
+            if 0<=rating<=5:
+                break
+        review = str(input("Enter your review: "))
+        r = Reviews()
+        r.create_update_review(yid,eid,rating,review)
         
     def update_info(self,yid):
         age = int(input("Enter age: "))
         c.execute("UPDATE YOUNG_DATA SET Y_AGE=? WHERE Y_ID=?",(age,yid,))
         conn.execute("COMMIT")
 
-    def assigned_elders(self,yid):
+    def get_assigned_elders(self,yid):
         c.execute("""SELECT * FROM ELDER_DATA INNER JOIN ASSIGNED_DATA ON
                   ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE YOUNG_ID=?""",(yid,))
         for row in c:
@@ -250,7 +241,34 @@ class Youngster:
                     ASSIGNED_DATA.ELDER_ID=ELDER_DATA.E_ID WHERE ASSIGNED_DATA.YOUNG_ID = ? """,(yid,))
         print("Your salary: ",next(c))
 
+class Reviews:
+    def print_reviews(self, reviewees, reviewer_type):
+        if reviewer_type == 'elder':
+            for i in reviewees:
+                c.execute("""SELECT R.REVIEWEE_ID, Y.Y_NAME, Y.Y_AGE, R.REVIEW, R.RATING FROM REVIEW_RATING_DATA AS R INNER JOIN YOUNG_DATA AS Y ON 
+                            R.REVIEWEE_ID = Y.Y_ID WHERE R.REVIEWEE_ID = ?""",(i,))
+                print("(REVIEWEE ID, NAME, AGE, COMMENT, RATING)")
+                print(c.fetchall())
+        else:
+            for i in reviewees:
+                    c.execute("""SELECT R.REVIEWEE_ID, E.E_NAME, E.E_AGE, E.E_FUND, R.REVIEW, R.RATING FROM REVIEW_RATING_DATA AS R INNER JOIN ELDER_DATA AS E ON 
+                                R.REVIEWEE_ID = E.E_ID WHERE R.REVIEWEE_ID = ?""",(i,))
+                    print("(REVIEWEE ID, NAME, AGE, FUND, COMMENT, RATING)")
+                    print(c.fetchall())
+        
 
+    def create_update_review(self, reviewer, reviewee, rating, comment):
+        c.execute("SELECT * FROM REVIEW_RATING_DATA WHERE REVIEWER_ID=? AND REVIEWEE_ID=?",(reviewer,reviewee))
+        res = c.fetchone()
+        if res:
+             # If a review exists already, update record
+            c.execute("UPDATE REVIEW_RATING_DATA SET REVIEW = ?, RATING = ? WHERE REVIEWER_ID = ? AND REVIEWEE_ID = ?",(comment,rating,reviewer,reviewee))
+        else:
+             # else, create a new record
+            c.execute("INSERT INTO REVIEW_RATING_DATA(REVIEWER_ID, REVIEWEE_ID, REVIEW, RATING) VALUES(?,?,?,?)",(reviewer,reviewee,comment,rating))
+        conn.execute("COMMIT")
+
+    
 def main():
     while True:
         print("1.Elder")
